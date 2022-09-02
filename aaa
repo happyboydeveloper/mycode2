@@ -1,0 +1,661 @@
+unuapp:
+api.js
+api.onlineStoreCartCommodityAdd = function({
+	onlineStoreCartId,
+	commodityId,
+	onlineStoreCartSingleList,
+	showLoading = false
+}) {
+	return api.post({
+		url: "/onlineStoreCartCommodity/add",
+		data: {
+			onlineStoreCartId: onlineStoreCartId,
+			commodityId:commodityId,
+			onlineStoreCartSingleList:onlineStoreCartSingleList
+		},
+		showLoading: showLoading,
+		throwError:true
+	});
+}
+
+api.onlineStoreCommodityGet = function({
+	commodityId,
+}) {
+	return api.post({
+		url: "/onlineStoreCommodity/get",
+		data: {
+			id: commodityId,
+		},
+		showLoading: false,
+		throwError:true
+	});
+}
+
+
+cart-commodity-detail.vue
+<template>
+	<view class="cartCommodityInfoPanel">
+		<view v-if="cartCommodityDetail == null" style="background-color: white;height: 260px;" class="row mainCenter crossCenter">
+			<uni-load-more showText="false" status="loading" iconType="circle" :contentText="loadMoreText"></uni-load-more>
+		</view>
+		<view v-if="cartCommodityDetail != null">
+			<view class="cartCommodityInfo column">
+				<view class="commoditySimpleInfo row">
+					<view class="cartCommodityImg">
+						<image src="../../static/no_image.png" mode="aspectFill"></image>
+						<image
+							:src="'https://jxcapp2.kaidanme.com/resource/file?filename=1429367632691234_mer/21/12/6411ed7f-24af-4436-8a20-449ea7cab8c3.jpg&width=150&h=304'"
+							mode="aspectFill"></image>
+					</view>
+					<view class="cartCommodityTextInfo column mainStart">
+						<view class="cartCommodityTitle">
+							{{ cartCommodityDetail.name }}
+						</view>
+						<view class="cartCommodityPrice row">
+							<view class="price">¥{{ cartCommodityDetail.price }}</view>
+							<view class="unit">/{{ cartCommodityDetail.unit }}</view>
+						</view>
+					</view>
+				</view>
+				<view v-if="cartCommodityDetail.salePropertyList.length==2" class="spec0 column">
+					<view class="spec0Title">{{cartCommodityDetail.salePropertyList[0].propertyName}}</view>
+					<view class="spec0Names row">
+						<view v-for="propertyValue in cartCommodityDetail.salePropertyList[0].propertyValueList"
+						@tap="selectSpec0Item" :data-item="propertyValue.propertyValueId">
+							<view class="spec0Name" :class="[spec0PropertyValueId==propertyValue.propertyValueId?'spec0ItemSelected':'']" >{{propertyValue.value}}</view>
+						</view>
+					</view>
+				</view>
+				<view class="singleListPadding">
+				<view class="singleList column">
+					<view class="singleListTileRow row mainSpaceBetween">
+						<view class="singleListTitleItem" style="width: 30%;">{{cartCommodityDetail.salePropertyList[cartCommodityDetail.salePropertyList.length-1].propertyName}}</view>
+						<view class="singleListTitleItem" style="width: 17.5%;">库存</view>
+						<view class="singleListTitleItem" style="width: 17.5%;">售价</view>
+						<view class="singleListTitleItem singleListTitleItemCount" style="width: 35%;">数量</view>
+					</view>
+					<view class="singleListRows">
+						<scroll-view  style="height: 180px;" scroll-y="true">
+							<view v-if="singleInfoMap != null" class="singleListRows">
+								<view class="singleListRow" v-for="singleInfo in singleInfoMap[spec0PropertyValueId]">
+									<view class="singleRow row mainSpaceBetween crossCenter">
+										<view class="singleRowItem"  style="width: 30%;">{{singleInfo.lastSpecItemName}}</view>
+										<view class="singleRowItem" style="width: 17.5%;">{{singleInfo.inventory>0?"有货":"无货"}}</view>
+										<view class="singleRowItem" style="width: 17.5%;">{{singleInfo.price}}</view>
+										<view class="singleRowItem row mainCenter" style="width: 35%;">
+											<uni-number-box :delay="false" :mychange="async ($value) => {return await commodityCountEdit($value, singleInfo);}" :value="singleInfo.afterCount" :min="0" :max="99999" background="#006DCE" color="#FFFFFF"></uni-number-box>
+										</view>
+									</view>
+								</view>
+							</view>
+
+						</scroll-view>
+					</view>
+				</view>
+				</view>
+
+				<view class="submitPanel row mainSpaceBetween crossCenter">
+					<view class="submitInfo column">
+						<view class="text0">已选{{singleCount}}件商品</view>
+						<view class="text1">合计：¥{{totalAmount}}</view>
+					</view>
+					<view class="submitBtn row mainEnd" @tap="saveCartCommodity">
+						<text class="" >确认</text>
+					</view>
+
+				</view>
+			</view>
+
+		</view>
+	</view>
+</template>
+
+<script>
+	import store from '../../common/js/store.js'
+
+	export default {
+		name:"cart-commodity-detail",
+		props: ["modelValue","onlineStoreCartInfo","onOk"],
+		watch: {
+			modelValue: {
+				handler(val) {
+					console.log("cart-commodity-detail值变化0--------");
+					console.log(val);
+					if(val && val.id){
+						requestDetailData(this, val.id);
+					}
+
+				}
+			}
+		},
+		methods:{
+			async commodityCountEdit(count, singleInfo) {
+				singleInfo.afterCount = parseInt(count);
+				console.log("cart-commodity-detail commodityCountEdit--------");
+				console.log(this.singleInfoMap);
+				var singleCount = 0;
+				var totalAmount = 0;
+				for(var key in this.singleInfoMap){
+					var singleInfoList = this.singleInfoMap[key];
+					singleInfoList.forEach((singleInfo)=>{
+						singleCount += singleInfo.afterCount;
+						totalAmount += singleInfo.price*100*singleInfo.afterCount;
+					});
+				}
+				this.singleCount = singleCount;
+				this.totalAmount = totalAmount/100;
+				console.log(singleCount);
+				console.log(totalAmount);
+				return true;
+			},
+			selectSpec0Item(e) {
+				var propertyValueId = e.currentTarget.dataset.item
+				this.spec0PropertyValueId = propertyValueId;
+			},
+			async saveCartCommodity(e) {
+				var onlineStoreCartSingleList = [];
+				for(var key in this.singleInfoMap){
+					var singleInfoList = this.singleInfoMap[key];
+					singleInfoList.forEach((singleInfo)=>{
+						if(singleInfo.afterCount != singleInfo.count){
+							onlineStoreCartSingleList.push({
+								singleId:singleInfo.id,
+								count:singleInfo.afterCount
+							});
+						}
+					});
+				}
+				if(onlineStoreCartSingleList.length != 0){
+					await store.api.onlineStoreCartCommodityAdd({
+						onlineStoreCartId: this.onlineStoreCartInfo.id,
+						commodityId:this.cartCommodityDetail.id,
+						onlineStoreCartSingleList:onlineStoreCartSingleList,
+						showLoading:true
+					});
+				}
+				if(this.onOk){
+					this.onOk(this.singleCount);
+				}
+			}
+		},
+		onLoad() {
+			var val = this.modelValue;
+			console.log("cart-commodity-detail onLoad00--------");
+			if(val && val.id){
+				requestDetailData(this, val.id);
+			}
+		},
+		data() {
+			return {
+				cartCommodityDetail:null,
+				spec0PropertyValueId:-666,
+				singleInfoMap:null,
+				singleCount:0,
+				totalAmount:0
+			};
+		}
+	}
+
+	function requestDetailData(_this, commodityId){
+		_this.cartCommodityDetail = null;
+		_this.spec0PropertyValueId = -666;
+		_this.singleInfoMap = null;
+		store.api.onlineStoreCommodityGet({
+			commodityId:commodityId
+		}).then((cartCommodityDetail)=>{
+			console.log("requestDetailData0--------");
+			console.log(cartCommodityDetail);
+			if(cartCommodityDetail==null || cartCommodityDetail.cartCommodity==null){
+				_this.singleCount = 0;
+				_this.totalAmount = 0;
+			}else{
+				_this.singleCount = cartCommodityDetail.cartCommodity.singleCount;
+				_this.totalAmount = cartCommodityDetail.cartCommodity.singleTotalPrice;
+			}
+
+
+			_this.cartCommodityDetail = cartCommodityDetail;
+
+			//单品信息
+			var singleMap = new Map();
+			if(cartCommodityDetail.singleList){
+				cartCommodityDetail.singleList.forEach((single)=>{
+					singleMap[single.key] = single;
+				});
+			}
+
+			//单品库存信息
+			var singleInventoryMap = new Map();
+			if(cartCommodityDetail.singleInventoryList){
+				cartCommodityDetail.singleInventoryList.forEach((singleInventory)=>{
+					singleInventoryMap[singleInventory.singleId] = singleInventory;
+				});
+			}
+
+			//购物车单品信息
+			var cartSingleMap = new Map();
+			if(cartCommodityDetail.cartCommodity && cartCommodityDetail.cartCommodity.onlineStoreCartSingleList){
+				cartCommodityDetail.cartCommodity.onlineStoreCartSingleList.forEach((cartSingle)=>{
+					cartSingleMap[cartSingle.singleId] = cartSingle;
+				});
+			}
+
+
+			var singleInfoMap = new Map();
+
+			var salePropertyLength = cartCommodityDetail.salePropertyList.length;
+
+			var firstPropertyValueList = [];
+			if(salePropertyLength == 2){
+				cartCommodityDetail.salePropertyList[0].propertyValueList.forEach((propertyValue)=>{
+					firstPropertyValueList.push(propertyValue);
+				});
+				_this.spec0PropertyValueId = firstPropertyValueList[0].propertyValueId;
+			}else if(salePropertyLength == 1){
+				firstPropertyValueList.push({propertyValueId:-666});
+			}
+
+			firstPropertyValueList.forEach((firstPropertyValue)=>{
+				var singleInfoList = [];
+				cartCommodityDetail.salePropertyList[cartCommodityDetail.salePropertyList.length-1].propertyValueList.forEach((propertyValue)=>{
+					console.log(propertyValue);
+					var single = singleMap[(firstPropertyValue.propertyValueId==-666?"":firstPropertyValue.propertyValueId+"#")+propertyValue.propertyValueId+""];
+					var singleInventory = single==null?{}:singleInventoryMap[single.id];
+					var cartSingle = (single==null?null:cartSingleMap[single.id]);
+
+					var singleInfo = {};
+					singleInfo.lastSpecItemName = propertyValue.value;
+					singleInfo.key = propertyValue.propertyValueId+"";
+					singleInfo.inventory = (singleInventory == null?0:singleInventory.count);
+					singleInfo.price = (single==null?cartCommodityDetail.price:single.price);
+					singleInfo.count = cartSingle==null?0:cartSingle.count;
+					singleInfo.afterCount = cartSingle==null?0:cartSingle.count;
+					singleInfo.id = single.id;
+					singleInfoList.push(singleInfo);
+				});
+				singleInfoMap[firstPropertyValue.propertyValueId] = singleInfoList;
+			});
+			_this.singleInfoMap = singleInfoMap;
+			console.log(singleInfoMap);
+		});
+	}
+</script>
+
+<style>
+	.cartCommodityInfoPanel{
+		background-color: #F8F8F8;
+	}
+
+	.commoditySimpleInfo{
+		padding-top: 25upx;
+		margin-bottom: 25upx;
+		padding-left: 25upx;
+		background-color: white;
+		padding-bottom: 25upx;
+		margin-bottom: 15upx;
+	}
+
+	.cartCommodityImg{
+		position: relative;
+		height: 150upx;
+		width: 150upx;
+	}
+
+	.cartCommodityImg image {
+		height: 150upx;
+		width: 150upx;
+		border-radius: 10upx;
+		position: absolute;
+	}
+
+	.cartCommodityTextInfo {
+		padding-left: 30upx;
+	}
+
+	.cartCommodityPrice {
+		padding-top: 10upx;
+		font-size: 30upx;
+	}
+
+	.cartCommodityPrice .price{
+		color: #C51F37;
+	}
+	.cartCommodityPrice .unit{
+		color: #C51F37;
+	}
+
+
+
+	.spec0{
+		background-color: white;
+		padding-left: 25upx;
+		padding-top: 25upx;
+		margin-bottom: 1upx;
+	}
+
+	.spec0Title{
+		font-size: 29upx;
+		color: #9E9E9E;
+	}
+
+	.spec0Names{
+		padding-top: 25upx;
+		flex-wrap:wrap;
+	}
+
+	.spec0Name{
+		font-size: 28upx;
+		color: #363636;
+		/* border-style: solid;
+		border-color: #ff0000;
+		border-width: 1upx;
+		 */
+		margin-right: 15upx;
+		margin-bottom: 15upx;
+		padding: 15upx;
+		border-radius: 15upx;
+		background-color: #F8F8F8;
+		border-style: solid;
+		border-width: 1upx;
+		border-color: white;
+	}
+
+	.singleListPadding{
+
+	}
+	.singleListTileRow{
+		background-color: white;
+		padding-top: 25upx;
+		padding-left: 25upx;
+		padding-right: 25upx;
+		padding-bottom: 30upx;
+	}
+	.singleList{
+		/* padding-top: 1upx; */
+	}
+	.singleListTitleItem{
+		font-size: 29upx;
+		color: #9E9E9E;
+		width: 100%;
+	}
+	.singleListTitleItemCount{
+		text-align: center;
+	}
+
+	.singleListRows{
+		/* padding-bottom: 25upx;
+		background-color: white; */
+	}
+
+	.singleRow{
+		/* padding-top: 15upx; */
+		padding-bottom: 30upx;
+		background-color: white;
+		padding-left: 25upx;
+		padding-right: 25upx;
+	}
+	.singleRowItem{
+		font-size: 28upx;
+		color: #363636;
+		width: 100%;
+	}
+
+
+	.spec0ItemSelected{
+		background-color: #F0F6FF;
+		border-color: #A1C4FF;
+
+	}
+
+	.submitPanel{
+		margin-top: 2upx;
+		background-color: white;
+		padding-left: 25upx;
+		padding-right: 25upx;
+		padding-top: 25upx;
+		padding-bottom: 25upx;
+	}
+	.submitInfo .text0{
+		font-size: 33upx;
+	}
+	.submitInfo .text1{
+		font-size: 30upx;
+		color: gray;
+	}
+	.submitBtn{
+		/* display: flex;
+		flex-direction: column;
+		align-items: center;
+		justify-content: center; */
+		background-color: #006DCE;
+		border-radius: 5px;
+		text-align: center;
+		height: 80upx;
+		width: 130upx;
+		color: white;
+		font-size: 16px;
+		align-content: center;
+		display: flex;
+		align-items: center;
+		justify-content: center;
+	}
+</style>
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+pages.json
+"navigationStyle":"custom",注释去掉
+
+
+
+
+
+
+
+
+
+
+
+commodityList.vue
+最前面增加<uni-nav-bar title="快来购" backgroundColor="#006DCE" statusBar="true" color="white" border="false"></uni-nav-bar>
+uni-number-box换成<uni-number-box :delay="!item.customSpec" :mychange="async ($value) => {return await commodityCountEdit($value, item);}" :value="item.singleCount" :min="0" :max="99999" background="#006DCE" color="#FFFFFF"></uni-number-box>
+最末尾增加：
+<view style="height: 1500upx;background-color: red;">
+				<!-- 普通弹窗 -->
+				<uni-popup safeArea="false" ref="popup" background-color="#fff" @change="change">
+					<cart-commodity-detail v-model="cartCommodityDetail" :onlineStoreCartInfo="onlineStoreCartInfo" :onOk="cartCommodityDetailOk"></cart-commodity-detail>
+				</uni-popup>
+			</view>
+data数据增加：cartCommodityDetail:null
+methods增加：
+cartCommodityDetailOk(singleCount){
+				console.log("cartCommodityDetailOk");
+				console.log(singleCount);
+				console.log(this.cartCommodityDetail);
+				this.cartCommodityDetail.singleCount = singleCount;
+				this.$refs.popup.close();
+			},
+commodityCountEdit里if(commodityInfo.customSpec){后面增加：
+this.cartCommodityDetail = commodityInfo;
+					this.$refs.popup.open('bottom');
+commodityInfo.singleCount = count;改为commodityInfo.singleCount = parseInt(count);
+
+
+uni-nav-bar.vue里去掉第三行的, 'uni-navbar--border': border
+
+
+
+
+
+
+
+
+
+
+
+uni-number-box.vue
+第6行插入：
+<view v-if="inputValue<=min" @click="qcalcValue('minus',$event)" class="uni-numbox__minus uni-numbox-btns" style="background-color: white;">
+			<text style="color:#FFFFFF" class="uni-numbox--text ">-</text>
+		</view>
+props增加：
+,
+			delay:{
+				type: Boolean,
+				default: true
+			}
+第一个settimeout部分改为：
+console.log("延迟信息了");
+				console.log(this.delay);
+				if(this.delay){
+					var hms = 1000;
+					this.inputValue = iv;
+					setTimeout(async ()=>{
+						let currentTime = Date.now();
+						if(currentTime - this.lastInputTime > hms){
+							this.onInput = true;
+							var result = await this.mychange(iv);
+							this.onInput = false;
+
+							if(!result){
+								this.inputValue = this.value;
+							}
+							this.$emit("change", +this.inputValue);
+							// TODO vue2 兼容
+							this.$emit("input", +this.inputValue);
+							// TODO vue3 兼容
+							this.$emit("update:modelValue", +this.inputValue);
+						}
+					},hms);
+				}else{
+					this.onInput = true;
+					var result =  this.mychange(iv);
+					this.onInput = false;
+
+					if(!result){
+						this.inputValue = this.value;
+					}
+					this.$emit("change", +this.inputValue);
+					// TODO vue2 兼容
+					this.$emit("input", +this.inputValue);
+					// TODO vue3 兼容
+					this.$emit("update:modelValue", +this.inputValue);
+				}
+第2个settimeout部分改为：
+if(this.delay){
+					var hms = 1000;
+					this.inputValue = iv
+					setTimeout(async ()=>{
+						let currentTime = Date.now();
+						if(currentTime - this.lastInputTime > hms){
+							this.onInput = true;
+							var result = await this.mychange(iv);
+							this.onInput = false;
+
+							if(!result){
+								this.inputValue = this.value;
+							}
+							this.$emit("change", +this.inputValue);
+							this.$emit("input", +this.inputValue);
+							this.$emit("update:modelValue", +this.inputValue);
+						}
+					},hms);
+				}else{
+					this.onInput = true;
+					var result =  this.mychange(iv);
+					this.onInput = false;
+
+					if(!result){
+						this.inputValue = this.value;
+					}
+					this.$emit("change", +this.inputValue);
+					this.$emit("input", +this.inputValue);
+					this.$emit("update:modelValue", +this.inputValue);
+				}
+
+
+
+
+
+
+
+
+uni-popup.vue
+将paddingBottom: this.safeAreaInsets + 'px',注释掉
+
+
+
+
+
+
+
+
+
+
+
+
+@Resource
+    private CommodityService commodityClient;
+    @Resource
+    private SingleService singleClient;
+    @Resource
+    private InventorySingleService inventorySingleClient;
+    @Resource
+    private OnlineStoreCartSingleDao onlineStoreCartSingleDao;
+
+
+@Override
+    public GetOnlineStoreCommodityInfo get(GetOnlineStoreCommodityDTO dto) {
+        //获取商品信息
+        GetCommodityDTO getCommodityDTO = DTOInitializer.initDTO(new GetCommodityDTO(),dto);
+        getCommodityDTO.setMerchantId(dto.getMerchantId());
+        getCommodityDTO.setId(dto.getId());
+        GetCommodityInfo commodityInfo = commodityClient.get(getCommodityDTO);
+        GetOnlineStoreCommodityInfo onlineStoreCommodityInfo = BeanMappingUtils.convert(commodityInfo, GetOnlineStoreCommodityInfo.class);
+
+        //获取商品的单品库存信息
+        GetWarehouseIdStoreWarehouseDTO getWarehouseIdStoreWarehouseDTO = DTOInitializer.initDTO(new GetWarehouseIdStoreWarehouseDTO(), dto);
+        getWarehouseIdStoreWarehouseDTO.setMerchantId(dto.getMerchantId());
+        getWarehouseIdStoreWarehouseDTO.setStoreId(dto.getStoreId());
+        GetWarehouseIdStoreWarehouseInfo getWarehouseIdStoreWarehouseInfo = storeWarehouseClient.getWarehouseId(getWarehouseIdStoreWarehouseDTO);
+        QueryInventorySingleDTO queryInventorySingleDTO = DTOInitializer.initDTO(new QueryInventorySingleDTO(),dto);
+        queryInventorySingleDTO.setMerchantId(dto.getMerchantId());
+        queryInventorySingleDTO.setCommodityId(dto.getId());
+        queryInventorySingleDTO.setWarehouseId(getWarehouseIdStoreWarehouseInfo.getWarehouseId());//TODO 设置库存
+        List<QueryInventorySingleInfo> singleInventoryInfoList = inventorySingleClient.query(queryInventorySingleDTO);
+        List<GetOnlineStoreCommoditySingleInventoryInfo> singleInventoryList = BeanMappingUtils.convertList(singleInventoryInfoList, GetOnlineStoreCommoditySingleInventoryInfo.class);
+
+        //查询购物车商品信息
+        OnlineStoreCartCommodity onlineStoreCartCommodity = onlineStoreCartCommodityDao.get(new EqualTo<>(OnlineStoreCartCommodity::getCreateUserId, dto.getUserId()),
+                new EqualTo<>(OnlineStoreCartCommodity::getStoreId, dto.getStoreId()),
+                new EqualTo<>(OnlineStoreCartCommodity::getCommodityId, dto.getId()));
+        GetOnlineStoreCommodityCartCommodityInfo cartCommodity = null;
+        if(onlineStoreCartCommodity != null){
+            List<OnlineStoreCartSingle> onlineStoreCartSingleList = onlineStoreCartSingleDao.list(new EqualTo<>(OnlineStoreCartSingle::getCreateUserId, dto.getUserId()),
+                    new EqualTo<>(OnlineStoreCartSingle::getStoreId, dto.getStoreId()),
+                    new EqualTo<>(OnlineStoreCartSingle::getCommodityId, dto.getId()));
+            List<GetOnlineStoreCommodityOnlineStoreCartSingleInfo> onlineStoreCartSingleInfoList = BeanMappingUtils.convertList(onlineStoreCartSingleList, GetOnlineStoreCommodityOnlineStoreCartSingleInfo.class);
+            cartCommodity = BeanMappingUtils.convert(onlineStoreCartCommodity, GetOnlineStoreCommodityCartCommodityInfo.class);
+            cartCommodity.setOnlineStoreCartSingleList(onlineStoreCartSingleInfoList);
+        }
+
+        onlineStoreCommodityInfo.setSingleInventoryList(singleInventoryList);
+        onlineStoreCommodityInfo.setCartCommodity(cartCommodity);
+        return onlineStoreCommodityInfo;
+    }
+
+
+
